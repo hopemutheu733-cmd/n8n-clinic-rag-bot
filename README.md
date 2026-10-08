@@ -8,7 +8,8 @@ The project has two n8n workflows.
 
 ### 1. Knowledge ingestion (`8a-clinic-knowledge-ingestion.json`)
 
-![Knowledge ingestion workflow](clinic-rag-ingestion.png)
+![Uploading Clinic Knowledge Ingestion.png…]()
+
 
 - Runs manually when the knowledge base changes.
 - Reads the clinic knowledge base from a Google Doc.
