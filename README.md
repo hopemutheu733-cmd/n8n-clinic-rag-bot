@@ -19,7 +19,7 @@ The project has two n8n workflows.
 
 ### 2. RAG chat (`8b-clinic-rag-chat.json`)
 
-![Clinic RAG chat workflow](CLINIC_RAG_CHAT_B.png)
+![Clinic RAG chat workflow](CLINIC%20RAG%20CHAT%20B.png)
 
 - Receives a patient message through the n8n chat trigger.
 - Searches the Supabase vector store for the most relevant chunks.
