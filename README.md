@@ -2,7 +2,8 @@
 
 A retrieval-augmented chatbot that answers patient questions about a fictional clinic using only its own knowledge base. Every reply is tagged `INFO`, `EMERGENCY` or `HANDOFF`, so urgent or out-of-scope messages can be routed to a human.
 
-![Clinic RAG chat workflow](clinic-rag-canvas.png)
+<img width="600" height="270" alt="CLINIC RAG CHAT B" src="https://github.com/user-attachments/assets/f20c86b9-64d4-44bb-8541-919c2ffaf4de" />
+
 
 ## How it works
 
