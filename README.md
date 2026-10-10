@@ -62,6 +62,8 @@ When the agent's reply starts with `EMERGENCY` or `HANDOFF`, the workflow emails
 
 The alert is a separate step after the agent, not a tool the model chooses to call. That means the email is sent every time the condition is met, even if the model would not have decided to send it.
 
+<img width="600" height="270" alt="canvas -with-alert" src="https://github.com/user-attachments/assets/ba7e5a42-2b4c-4326-a3f2-6b4447edbff9" />
+
 ## Safety design
 
 - Never diagnoses and never gives medicine doses.
