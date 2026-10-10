@@ -21,7 +21,8 @@ The project has two n8n workflows. The chat workflow has an agent with a booking
 
 ### 2. RAG chat agent (`8b-clinic-rag-chat.json`)
 
-![RAG chat agent workflow with booking tool and staff alert](canvas-with-alert.png)
+<img width="600" height="270" alt="CLINIC RAG CHAT B" src="https://github.com/user-attachments/assets/4a22907b-2ede-4ac9-afdd-cda61ebaf612" />
+
 
 - Receives a patient message through the n8n chat trigger.
 - Searches the Supabase vector store for the most relevant chunks.
