@@ -1,130 +1,140 @@
 # Clinic RAG Assistant
 
-AI-powered clinic assistant built with n8n, Supabase, and LLMs. The workflow answers patient questions using only the clinic's own knowledge base, flags urgent or out-of-scope requests, and can collect appointment details for staff review.
+AI-powered clinic assistant for patients and clinic staff who need fast, reliable answers from a trusted knowledge base.
 
-This project demonstrates a practical AI workflow pattern: grounded answers from trusted knowledge, human escalation for risk, and automated operations around the bot.
+This project builds a clinic-facing AI assistant that answers patient questions using only the clinic's own documentation, routes emergencies to staff, and supports appointment booking in a safe and structured way.
 
-## Why this project matters
+## Who this is for
 
-Many AI assistants fail because they answer from broad internet knowledge instead of trusted source material. In healthcare, that is not acceptable.
+This project is designed for:
 
-This project solves that by combining:
+- healthcare clinics
+- patient support teams
+- AI builders exploring safe RAG systems
+- teams building operational chat assistants with guardrails
 
-- a retrieval layer over a clinic knowledge base
-- grounded answers from only stored excerpts
-- triage rules for emergency and handoff cases
-- appointment booking for routine service requests
-- automatic alerts to clinic staff
+## Problem it solves
 
-## What it does
+Many chatbots answer from general internet knowledge, which is risky in healthcare. Clinics need a system that:
 
-The assistant:
+- answers from trusted sources only
+- routes urgent issues to human staff
+- avoids unsafe medical advice
+- captures booking requests in a structured way
 
-- answers patient questions using a clinic knowledge base stored in Supabase
-- classifies each response as `INFO`, `EMERGENCY`, or `HANDOFF`
-- blocks unsafe or out-of-scope advice
-- collects appointment information when a patient wants to book
-- saves booking requests in Supabase
-- sends alerts to clinic staff when urgent or escalated cases need attention
+## What this project does
+
+This workflow:
+
+- retrieves clinic knowledge from a stored document set
+- searches that knowledge using embeddings and vector similarity
+- sends the most relevant context to an AI agent
+- answers only from retrieved clinic information
+- flags urgent or out-of-scope requests
+- stores booking requests for staff review
+- sends email alerts when escalation is needed
+
+## Why this matters
+
+Healthcare is a high-risk domain, so AI needs to be:
+
+- grounded
+- constrained
+- safe
+- transparent
+
+This project shows how RAG can be used with operational guardrails to make an assistant more useful and safer.
 
 ## Architecture
 
 ```text
 Patient message
    ↓
-Chat trigger (n8n)
+n8n chat trigger
    ↓
-Search relevant knowledge chunks in Supabase (pgvector)
+Search relevant clinic docs in Supabase (pgvector)
    ↓
-LLM agent receives context + patient message
+LLM agent receives message + retrieved context
    ↓
 Decision:
-   - INFO answer
-   - EMERGENCY response
-   - HANDOFF response
+   - INFO response
+   - EMERGENCY escalation
+   - HANDOFF
    - Book appointment request
    ↓
-Supabase storage / Gmail alert / final patient reply
+Supabase storage / Gmail alert / final reply
 ```
 
 ## Core workflow
 
 ### 1. Knowledge ingestion
 
-Loads clinic documents into Supabase as vectorized chunks for retrieval.
+Clinic knowledge is loaded into Supabase as vectorized chunks.
 
 - Google Docs source
-- chunking and embeddings
-- pgvector storage in Supabase
-- refreshes when the knowledge base changes
+- chunking
+- embeddings with Gemini
+- vector storage in Supabase
 
-![Knowledge ingestion workflow](Clinic%20Knowledge%20Ingestion.png)
+![Clinic Knowledge Ingestion](Clinic%20Knowledge%20Ingestion.png)
 
-### 2. RAG chat workflow
+### 2. Patient chat assistant
 
-- receives patient messages through the n8n chat trigger
-- searches the most relevant excerpts from Supabase
-- passes those excerpts and the patient message to the AI agent
-- answers only from the retrieved context
-- triggers booking or escalation logic when needed
+The chatbot:
 
-<img width="600" height="270" alt="RAG chat workflow in n8n" src="https://github.com/user-attachments/assets/4a22907b-2ede-4ac9-afdd-cda61ebaf612" />
+- receives a patient question
+- finds the most relevant knowledge snippets
+- answers only from that context
+- triggers escalation when needed
 
-### 3. Appointment booking tool
+### 3. Appointment booking
 
-When a patient asks to book:
+When the patient asks to book:
 
-- the agent asks for required details if missing
-- it collects name, phone, preferred date/time, and reason
-- it stores the request in Supabase as pending
-- it does not proceed with a booking if the case is urgent
+- the bot requests missing information
+- stores the appointment request in Supabase
+- prevents booking during emergency situations
 
-**The agent with the Book Appointment tool attached**
+![Appointment booking](appointment%20booking.png)
 
-![Agent with the Book Appointment tool](appointment%20booking%20details%202.png)
+![Appointment booking details](appointment%20booking%20details%202.png)
 
-**Step 1: the agent asks for any missing details**
+![Appointment booking info](appointment%20booking%20info%203.png)
 
-![Agent asking for missing details](appointment%20booking.png)
+![Appointment saved in Supabase](APPOINTMENT%20LEAD.PNG)
 
-**Step 2: the patient gives the details and the booking is confirmed**
+### 4. Staff alert system
 
-![Completed booking conversation](appointment%20booking%20info%203.png)
+If the response is classified as EMERGENCY or HANDOFF, staff are notified by email.
 
-**Step 3: the request is saved in Supabase with status pending**
-
-![Saved appointment in Supabase](APPOINTMENT%20LEAD%20.PNG)
-
-### 4. Staff alert workflow
-
-If the response is labeled `EMERGENCY` or `HANDOFF`, staff receive an email with the patient's message and the bot's reply.
-
-<img width="600" height="270" alt="Full workflow canvas with the staff alert" src="https://github.com/user-attachments/assets/ba7e5a42-2b4c-4326-a3f2-6b4447edbff9" />
+![Emergency escalation](emergency%20.png)
 
 ## Safety design
 
 - no diagnosis or medication dosing
 - emergency symptoms trigger a strong escalation message
 - emergency or handoff cases never proceed with booking
-- if the booking tool fails, the assistant does not claim the appointment was made
-- the system responds with a handoff instead of guessing
-
-**Emergency messages never create a booking**
-
-![Emergency conversation](emergency%20.png)
+- the system does not guess when information is missing
+- the assistant tells the patient to contact a person when needed
 
 ## Example conversations
 
-| Patient message | Reply type | Outcome |
+| Patient message | Response type | Outcome |
 | --- | --- | --- |
-| How much is a malaria test? | `INFO` | Answer from clinic knowledge base |
-| I have severe chest pain and I am struggling to breathe | `EMERGENCY` | Urgent escalation and staff alert |
-| Can you prescribe me antibiotics for my cough? | `HANDOFF` | Escalate to staff |
-| I'd like to book an appointment | `INFO` | Collect details and save booking request |
+| How much is a malaria test? | INFO | Answer from clinic knowledge base |
+| I have severe chest pain and difficulty breathing | EMERGENCY | Urgent escalation and staff alert |
+| Can you prescribe antibiotics for a cough? | HANDOFF | Escalate to staff |
+| I want to book an appointment | INFO | Booking details collected |
 
 ## Tech stack
 
-n8n · Supabase · pgvector · Gemini embeddings · OpenRouter · Google Docs · Gmail · JavaScript / workflow logic
+- n8n
+- Supabase (pgvector)
+- Google Gemini (embeddings)
+- OpenRouter
+- Google Docs
+- Gmail
+- JavaScript / workflow logic
 
 ## Repository structure
 
@@ -133,51 +143,47 @@ n8n · Supabase · pgvector · Gemini embeddings · OpenRouter · Google Docs ·
 ├── 8a-clinic-knowledge-ingestion.json
 ├── 8b-clinic-rag-chat.json
 ├── README.md
-├── docs/
-│   └── screenshots/
 ├── Clinic Knowledge Ingestion.png
 ├── appointment booking.png
 ├── appointment booking details 2.png
 ├── appointment booking info 3.png
-├── APPOINTMENT LEAD .PNG
-├── emergency .png
-└── ...
+├── APPOINTMENT LEAD.PNG
+└── emergency .png
 ```
 
 ## Setup
 
-1. Import both workflow files into n8n.
+1. Import both workflow JSON files into n8n.
 2. Add credentials for Supabase, Google Gemini, OpenRouter, Google Docs, and Gmail.
 3. Enable the vector extension in Supabase.
-4. Create the appointments table and the vector store table.
-5. Put the clinic knowledge base in a Google Doc.
-6. Run the ingestion workflow once to load the knowledge chunks.
-7. Open the chat workflow and test the assistant.
-
-## Notes
-
-- the clinic and its information are fictional
-- this is a portfolio project and not medical advice
-- credentials are not stored in the repo
-- re-running ingestion adds duplicate chunks, so clear the vector table before reloading updated content
+4. Create the `appointments` table and vector store.
+5. Add the knowledge base into a Google Doc.
+6. Run the ingestion workflow.
+7. Test the chat flow in n8n.
 
 ## Skills demonstrated
 
-- LLM workflow orchestration
 - RAG system design
-- vector search and embeddings
-- decision-making and triage logic
-- AI product safety patterns
-- workflow automation with n8n
-- structured storage for appointments and service data
+- vector search
+- workflow automation
+- AI safety design
+- operational chatbot design
+- healthcare domain reasoning
+- structured data handling
+
+## Notes
+
+- This is a portfolio project and not medical advice.
+- The clinic information is fictional.
+- Credentials are not stored in the repo.
+- Re-running ingestion can duplicate vectors unless the table is cleared.
 
 ## Future improvements
 
-- stronger row-level security for appointment data
-- better evaluation of triage accuracy
-- production deployment on a dedicated server
-- WhatsApp or SMS integration
-- more robust monitoring and retry logic
+- stronger data access controls (row-level security on the appointments table, service role key)
+- an evaluation set to measure triage and answer accuracy
+- 24/7 deployment on an always-on server instead of a demo setup
+- WhatsApp integration through Meta's Cloud API
 
 ## Author
 
