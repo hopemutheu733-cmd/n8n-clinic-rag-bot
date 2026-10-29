@@ -1,31 +1,46 @@
-# Clinic RAG Assistant
+# ICD-10 Assistant
 
-AI-powered clinic assistant built with n8n, Supabase, and LLMs. The workflow answers patient questions using only the clinic's own knowledge base, flags urgent or out-of-scope requests, and can collect appointment details for staff review.
+AI-powered ICD-10 coding support for clinicians, coders, and healthcare teams who need faster, more structured diagnosis suggestions from plain-language descriptions.
 
-This project demonstrates a practical AI workflow pattern: grounded answers from trusted knowledge, human escalation for risk, and automated operations around the bot.
+This project turns everyday symptom descriptions into likely ICD-10 diagnosis suggestions using a grounded AI pipeline. Instead of letting the model guess freely, it searches a real ICD-10 database first and only returns codes that are supported by the data.
 
-## Why this project matters
+## Who this is for
 
-Many AI assistants fail because they answer from broad internet knowledge instead of trusted source material. In healthcare, that is not acceptable.
+This project is designed for:
+- medical coders
+- healthcare professionals reviewing diagnosis codes
+- AI builders exploring grounded clinical LLM workflows
+- teams building healthcare software with real-world data constraints
 
-This project solves that by combining:
+## Problem it solves
 
-- a retrieval layer over a clinic knowledge base
-- grounded answers from only stored excerpts
-- triage rules for emergency and handoff cases
-- appointment booking for routine service requests
-- automatic alerts to clinic staff
+Medical coding is slow, repetitive, and depends on highly specific terminology. People often describe symptoms in plain language, but ICD-10 coding requires precise, standardized terms.
 
-## What it does
+This project reduces that friction by:
+- converting natural language into clinical terms
+- searching a real diagnosis dataset
+- narrowing suggestions to valid ICD-10 codes
+- explaining the recommendation in a clear, human-readable format
 
-The assistant:
+## What this project does
 
-- answers patient questions using a clinic knowledge base stored in Supabase
-- classifies each response as `INFO`, `EMERGENCY`, or `HANDOFF`
-- blocks unsafe or out-of-scope advice
-- collects appointment information when a patient wants to book
-- saves booking requests in Supabase
-- sends alerts to clinic staff when urgent or escalated cases need attention
+Given a description like:
+
+```json
+{
+  "description": "burning pain when passing urine"
+}
+
+{
+  "clinical_terms": "Dysuria",
+  "suggestions": [
+    {
+      "code": "R30.0",
+      "description": "Dysuria",
+      "reason": "Burning pain when passing urine matches dysuria."
+    }
+  ]
+}
 
 ## Architecture
 
