@@ -1,3 +1,5 @@
+LangChain ICD-10 Assistant README
+md
 # ICD-10 Assistant
 
 AI-powered ICD-10 coding support for clinicians, coders, and healthcare teams who need faster, more structured diagnosis suggestions from plain-language descriptions.
@@ -30,7 +32,9 @@ Given a description like:
 {
   "description": "burning pain when passing urine"
 }
+the app returns likely diagnosis suggestions such as:
 
+JSON
 {
   "clinical_terms": "Dysuria",
   "suggestions": [
@@ -41,159 +45,113 @@ Given a description like:
     }
   ]
 }
+Why this matters
+Medical AI needs to be grounded. A model that simply invents codes is unsafe and unreliable.
 
-## Architecture
+This project demonstrates a more practical pattern:
 
-```text
-Patient message
+interpret the user input
+retrieve real data from a trusted code table
+let the model choose from valid candidates
+return a response with reasoning
+How it works
+The user enters a plain-English medical description.
+An LLM rewrites the description into more clinical terminology.
+The system searches a MySQL ICD-10 dataset for matching candidates.
+The model selects the strongest matches from the real data.
+The final answer is returned along with short explanations.
+Text
+User input
    ↓
-Chat trigger (n8n)
+Rewrite step (LLM)
    ↓
-Search relevant knowledge chunks in Supabase (pgvector)
+Search ICD-10 database
    ↓
-LLM agent receives context + patient message
+Candidate selection
    ↓
-Decision:
-   - INFO answer
-   - EMERGENCY response
-   - HANDOFF response
-   - Book appointment request
-   ↓
-Supabase storage / Gmail alert / final patient reply
-```
+Validated response
+Tech stack
+Python
+FastAPI
+LangChain
+OpenRouter
+MySQL
+HTML / frontend
+Docker
+Render
+Key features
+plain-English symptom-to-code workflow
+grounded results from a real ICD-10 dataset
+candidate filtering before final output
+REST API + UI
+evaluation script for example cases
+deployment-ready container setup
+Evaluation
+I tested the app on 20 common symptom descriptions and tracked whether an acceptable code appeared in the suggestions.
 
-## Core workflow
+Measure	Result
+Acceptable code appeared in the suggestions	16 of 20 (80%)
+First suggestion was acceptable	16 of 20
+Known limitations:
 
-### 1. Knowledge ingestion
-
-Loads clinic documents into Supabase as vectorized chunks for retrieval.
-
-- Google Docs source
-- chunking and embeddings
-- pgvector storage in Supabase
-- refreshes when the knowledge base changes
-
-![Knowledge ingestion workflow](Clinic%20Knowledge%20Ingestion.png)
-
-### 2. RAG chat workflow
-
-- receives patient messages through the n8n chat trigger
-- searches the most relevant excerpts from Supabase
-- passes those excerpts and the patient message to the AI agent
-- answers only from the retrieved context
-- triggers booking or escalation logic when needed
-
-<img width="600" height="270" alt="RAG chat workflow in n8n" src="https://github.com/user-attachments/assets/4a22907b-2ede-4ac9-afdd-cda61ebaf612" />
-
-### 3. Appointment booking tool
-
-When a patient asks to book:
-
-- the agent asks for required details if missing
-- it collects name, phone, preferred date/time, and reason
-- it stores the request in Supabase as pending
-- it does not proceed with a booking if the case is urgent
-
-**The agent with the Book Appointment tool attached**
-
-![Agent with the Book Appointment tool](appointment%20booking%20details%202.png)
-
-**Step 1: the agent asks for any missing details**
-
-![Agent asking for missing details](appointment%20booking.png)
-
-**Step 2: the patient gives the details and the booking is confirmed**
-
-![Completed booking conversation](appointment%20booking%20info%203.png)
-
-**Step 3: the request is saved in Supabase with status pending**
-
-![Saved appointment in Supabase](APPOINTMENT%20LEAD%20.PNG)
-
-### 4. Staff alert workflow
-
-If the response is labeled `EMERGENCY` or `HANDOFF`, staff receive an email with the patient's message and the bot's reply.
-
-<img width="600" height="270" alt="Full workflow canvas with the staff alert" src="https://github.com/user-attachments/assets/ba7e5a42-2b4c-4326-a3f2-6b4447edbff9" />
-
-## Safety design
-
-- no diagnosis or medication dosing
-- emergency symptoms trigger a strong escalation message
-- emergency or handoff cases never proceed with booking
-- if the booking tool fails, the assistant does not claim the appointment was made
-- the system responds with a handoff instead of guessing
-
-**Emergency messages never create a booking**
-
-![Emergency conversation](emergency%20.png)
-
-## Example conversations
-
-| Patient message | Reply type | Outcome |
-| --- | --- | --- |
-| How much is a malaria test? | `INFO` | Answer from clinic knowledge base |
-| I have severe chest pain and I am struggling to breathe | `EMERGENCY` | Urgent escalation and staff alert |
-| Can you prescribe me antibiotics for my cough? | `HANDOFF` | Escalate to staff |
-| I'd like to book an appointment | `INFO` | Collect details and save booking request |
-
-## Tech stack
-
-n8n · Supabase · pgvector · Gemini embeddings · OpenRouter · Google Docs · Gmail · JavaScript / workflow logic
-
-## Repository structure
-
-```text
+keyword-based search can still miss unusual phrasing
+the project is not a certified billing tool
+it covers diagnosis coding, not full coding workflows
+Safety and limitations
+This is a portfolio project, not a final clinical coding tool.
+Suggestions should be reviewed by a qualified coder.
+Do not enter real patient data into the demo.
+The project covers ICD-10 diagnosis codes only.
+Project structure
+Text
 .
-├── 8a-clinic-knowledge-ingestion.json
-├── 8b-clinic-rag-chat.json
+├── api.py
+├── pipeline.py
+├── chain.py
+├── db.py
+├── schema.sql
+├── icd10.sql
+├── evaluate.py
+├── results.csv
+├── index.html
+├── Dockerfile
+├── requirements.txt
+├── .env.example
 ├── README.md
-├── docs/
-│   └── screenshots/
-├── Clinic Knowledge Ingestion.png
-├── appointment booking.png
-├── appointment booking details 2.png
-├── appointment booking info 3.png
-├── APPOINTMENT LEAD .PNG
-├── emergency .png
-└── ...
-```
+├── demo.png
+└── .gitignore
+Run locally
+bash
+git clone https://github.com/hopemutheu733-cmd/langchain-icd10-assistant.git
+cd langchain-icd10-assistant
+python -m pip install -r requirements.txt
+Create a MySQL database, then run schema.sql and load icd10.sql.
 
-## Setup
+Copy .env.example to .env and fill in your values:
 
-1. Import both workflow files into n8n.
-2. Add credentials for Supabase, Google Gemini, OpenRouter, Google Docs, and Gmail.
-3. Enable the vector extension in Supabase.
-4. Create the appointments table and the vector store table.
-5. Put the clinic knowledge base in a Google Doc.
-6. Run the ingestion workflow once to load the knowledge chunks.
-7. Open the chat workflow and test the assistant.
+env
+MYSQL_HOST=localhost
+MYSQL_USER=your_mysql_user
+MYSQL_PORT=3306
+MYSQL_PASSWORD=your_mysql_password
+MYSQL_DATABASE=your_database_name
+OPENROUTER_API_KEY=your_openrouter_key
+OPENROUTER_MODEL=your_model_name
+Then run:
 
-## Notes
+bash
+python -m uvicorn api:app --reload
+Open:
 
-- the clinic and its information are fictional
-- this is a portfolio project and not medical advice
-- credentials are not stored in the repo
-- re-running ingestion adds duplicate chunks, so clear the vector table before reloading updated content
-
-## Skills demonstrated
-
-- LLM workflow orchestration
-- RAG system design
-- vector search and embeddings
-- decision-making and triage logic
-- AI product safety patterns
-- workflow automation with n8n
-- structured storage for appointments and service data
-
-## Future improvements
-
-- stronger row-level security for appointment data
-- better evaluation of triage accuracy
-- production deployment on a dedicated server
-- WhatsApp or SMS integration
-- more robust monitoring and retry logic
-
-## Author
-
-**Hope Mutheu** · [GitHub](https://github.com/hopemutheu733-cmd)
+http://127.0.0.1:8000
+http://127.0.0.1:8000/docs
+Skills demonstrated
+AI / LLM engineering
+prompt design
+retrieval-augmented workflows
+backend API development
+healthcare domain modeling
+evaluation and failure analysis
+deployment configuration
+Author
+Hope Mutheu
