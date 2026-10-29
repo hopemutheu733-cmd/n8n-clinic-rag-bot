@@ -1,40 +1,83 @@
-# Clinic RAG Assistant (n8n + Supabase)
+# Clinic RAG Assistant
 
-An AI agent for a fictional clinic, built in n8n. It answers patient questions using only the clinic's own knowledge base (retrieval-augmented generation), saves appointment requests to Supabase, and emails clinic staff when a message needs a human.
+AI-powered clinic assistant built with n8n, Supabase, and LLMs. The workflow answers patient questions using only the clinic's own knowledge base, flags urgent or out-of-scope requests, and can collect appointment details for staff review.
 
-Every reply is tagged `INFO`, `EMERGENCY` or `HANDOFF`, so urgent or out-of-scope messages can be routed to a human.
+This project demonstrates a practical AI workflow pattern: grounded answers from trusted knowledge, human escalation for risk, and automated operations around the bot.
 
-## How it works
+## Why this project matters
 
-The project has two n8n workflows. The chat workflow has an agent with a booking tool, followed by a staff alert.
+Many AI assistants fail because they answer from broad internet knowledge instead of trusted source material. In healthcare, that is not acceptable.
 
-### 1. Knowledge ingestion (`8a-clinic-knowledge-ingestion.json`)
+This project solves that by combining:
+
+- a retrieval layer over a clinic knowledge base
+- grounded answers from only stored excerpts
+- triage rules for emergency and handoff cases
+- appointment booking for routine service requests
+- automatic alerts to clinic staff
+
+## What it does
+
+The assistant:
+
+- answers patient questions using a clinic knowledge base stored in Supabase
+- classifies each response as `INFO`, `EMERGENCY`, or `HANDOFF`
+- blocks unsafe or out-of-scope advice
+- collects appointment information when a patient wants to book
+- saves booking requests in Supabase
+- sends alerts to clinic staff when urgent or escalated cases need attention
+
+## Architecture
+
+```text
+Patient message
+   ↓
+Chat trigger (n8n)
+   ↓
+Search relevant knowledge chunks in Supabase (pgvector)
+   ↓
+LLM agent receives context + patient message
+   ↓
+Decision:
+   - INFO answer
+   - EMERGENCY response
+   - HANDOFF response
+   - Book appointment request
+   ↓
+Supabase storage / Gmail alert / final patient reply
+```
+
+## Core workflow
+
+### 1. Knowledge ingestion
+
+Loads clinic documents into Supabase as vectorized chunks for retrieval.
+
+- Google Docs source
+- chunking and embeddings
+- pgvector storage in Supabase
+- refreshes when the knowledge base changes
 
 ![Knowledge ingestion workflow](Clinic%20Knowledge%20Ingestion.png)
 
-- Runs manually when the knowledge base changes.
-- Reads the clinic knowledge base from a Google Doc.
-- Splits the text into chunks with the Default Data Loader.
-- Creates embeddings with Google Gemini.
-- Stores the chunks and embeddings in Supabase (pgvector).
-- Sample run: the clinic Google Doc was split into 5 chunks and stored in Supabase.
+### 2. RAG chat workflow
 
-### 2. RAG chat agent (`8b-clinic-rag-chat.json`)
+- receives patient messages through the n8n chat trigger
+- searches the most relevant excerpts from Supabase
+- passes those excerpts and the patient message to the AI agent
+- answers only from the retrieved context
+- triggers booking or escalation logic when needed
 
-<img width="600" height="270" alt="CLINIC RAG CHAT B" src="https://github.com/user-attachments/assets/4a22907b-2ede-4ac9-afdd-cda61ebaf612" />
+<img width="600" height="270" alt="RAG chat workflow in n8n" src="https://github.com/user-attachments/assets/4a22907b-2ede-4ac9-afdd-cda61ebaf612" />
 
+### 3. Appointment booking tool
 
-- Receives a patient message through the n8n chat trigger.
-- Searches the Supabase vector store for the most relevant chunks.
-- A JavaScript Code node processes the retrieved chunks and passes them, with the patient's message, to the AI Agent.
-- The AI Agent (OpenRouter chat model, simple memory) answers using only the retrieved excerpts.
-- When a patient wants to book, the agent calls the **Book Appointment** tool, which saves the request to Supabase.
-- After the agent, an If node checks the reply type. `EMERGENCY` and `HANDOFF` replies send an alert email to the clinic through Gmail. `INFO` replies send nothing.
-- A final Edit Fields node returns the agent's reply to the patient, so the chat shows the answer instead of the email result.
+When a patient asks to book:
 
-### 3. Appointment booking (agent tool)
-
-When a patient asks to book, the agent collects four details: full name, phone number, preferred date or time, and the reason for the visit. Once it has all four, it calls a Supabase tool that saves the request to an `appointments` table with status `pending`. The clinic confirms by phone.
+- the agent asks for required details if missing
+- it collects name, phone, preferred date/time, and reason
+- it stores the request in Supabase as pending
+- it does not proceed with a booking if the case is urgent
 
 **The agent with the Book Appointment tool attached**
 
@@ -52,71 +95,90 @@ When a patient asks to book, the agent collects four details: full name, phone n
 
 ![Saved appointment in Supabase](APPOINTMENT%20LEAD%20.PNG)
 
+### 4. Staff alert workflow
+
+If the response is labeled `EMERGENCY` or `HANDOFF`, staff receive an email with the patient's message and the bot's reply.
+
+<img width="600" height="270" alt="Full workflow canvas with the staff alert" src="https://github.com/user-attachments/assets/ba7e5a42-2b4c-4326-a3f2-6b4447edbff9" />
+
+## Safety design
+
+- no diagnosis or medication dosing
+- emergency symptoms trigger a strong escalation message
+- emergency or handoff cases never proceed with booking
+- if the booking tool fails, the assistant does not claim the appointment was made
+- the system responds with a handoff instead of guessing
+
 **Emergency messages never create a booking**
 
 ![Emergency conversation](emergency%20.png)
 
-### 4. Staff alert (If node + Gmail)
-
-When the agent's reply starts with `EMERGENCY` or `HANDOFF`, the workflow emails the clinic with the bot's reply and the patient's original message. This covers emergencies, out-of-scope requests and failed bookings. Ordinary `INFO` replies, including successful bookings, send no email.
-
-The alert is a separate step after the agent, not a tool the model chooses to call. That means the email is sent every time the condition is met, even if the model would not have decided to send it.
-
-<img width="600" height="270" alt="canvas -with-alert" src="https://github.com/user-attachments/assets/ba7e5a42-2b4c-4326-a3f2-6b4447edbff9" />
-
-## Safety design
-
-- Never diagnoses and never gives medicine doses.
-- Emergency symptoms get an `EMERGENCY` reply that tells the patient to call 999 or 112 or go to the nearest hospital.
-- Emergency symptoms never create a booking, even if the patient asks to book.
-- Emergency and handoff replies automatically alert clinic staff by email.
-- Anything not in the knowledge base gets a `HANDOFF` reply instead of a guess.
-- If the booking tool fails, the agent does not claim the appointment was booked. It replies with a `HANDOFF` asking the patient to call the clinic, and staff are alerted.
-
 ## Example conversations
 
-| Patient message | Reply type | Bot reply | Staff email |
-| --- | --- | --- | --- |
-| How much is a malaria test? | INFO | INFO: A malaria test costs KES 300. | No |
-| I have severe chest pain and I am struggling to breathe | EMERGENCY | EMERGENCY: Call 999 or 112 immediately, or go to the nearest hospital. Severe chest pain and difficulty breathing require urgent medical attention. | Yes |
-| Can you prescribe me antibiotics for my cough? | HANDOFF | HANDOFF: I'll pass your request to the clinic team. Please call 0700 000 000 for a consultation. | Yes |
-| I'd like to book an appointment | INFO | INFO: To book an appointment I need your full name, phone number, preferred date or time, and the reason for the visit. Please provide these details. | No |
-| My name is Test Patient, phone 0700000000, I'd like Monday morning for a general check-up | INFO | INFO: Your appointment request for a general check-up on Monday morning has been received. Our clinic will confirm the exact time by phone. | No |
-| I have severe chest pain and can't breathe, can I book for next week? | EMERGENCY | EMERGENCY: Call 999 or 112 immediately, or go to the nearest hospital. Do not wait. | Yes |
+| Patient message | Reply type | Outcome |
+| --- | --- | --- |
+| How much is a malaria test? | `INFO` | Answer from clinic knowledge base |
+| I have severe chest pain and I am struggling to breathe | `EMERGENCY` | Urgent escalation and staff alert |
+| Can you prescribe me antibiotics for my cough? | `HANDOFF` | Escalate to staff |
+| I'd like to book an appointment | `INFO` | Collect details and save booking request |
 
-Prices, triage rules and contact details are stored in the knowledge base (Google Doc), retrieved from Supabase, and passed to the AI Agent as context. The bot answers only from that context.
+## Tech stack
 
-## Tools
+n8n · Supabase · pgvector · Gemini embeddings · OpenRouter · Google Docs · Gmail · JavaScript / workflow logic
 
-n8n Cloud, Supabase (pgvector), Google Gemini embeddings, OpenRouter, Google Docs, Gmail
+## Repository structure
+
+```text
+.
+├── 8a-clinic-knowledge-ingestion.json
+├── 8b-clinic-rag-chat.json
+├── README.md
+├── docs/
+│   └── screenshots/
+├── Clinic Knowledge Ingestion.png
+├── appointment booking.png
+├── appointment booking details 2.png
+├── appointment booking info 3.png
+├── APPOINTMENT LEAD .PNG
+├── emergency .png
+└── ...
+```
 
 ## Setup
 
 1. Import both workflow files into n8n.
-2. Add your own credentials for Supabase, Google Gemini, OpenRouter, Google Docs and Gmail.
-3. Enable the `vector` extension in Supabase and create the vector store table used by the workflow.
-4. Create an `appointments` table in Supabase with these columns: `id`, `patient_name`, `phone`, `preferred_date`, `reason`, `status` (default `pending`) and `created_at`. Make sure the Supabase credential used in n8n has permission to write to it.
-5. Put the clinic knowledge base in a Google Doc and link it in the ingestion workflow.
-6. Set the recipient address on the Gmail node to the clinic's staff inbox.
-7. Run the ingestion workflow once to load the chunks.
-8. Open the chat workflow and click **Open chat** to test.
-
-## Workflow files
-
-- `8a-clinic-knowledge-ingestion.json`
-- `8b-clinic-rag-chat.json`
+2. Add credentials for Supabase, Google Gemini, OpenRouter, Google Docs, and Gmail.
+3. Enable the vector extension in Supabase.
+4. Create the appointments table and the vector store table.
+5. Put the clinic knowledge base in a Google Doc.
+6. Run the ingestion workflow once to load the knowledge chunks.
+7. Open the chat workflow and test the assistant.
 
 ## Notes
 
-- The clinic and its information are fictional. This is a portfolio project, not medical advice.
-- Credentials are not included in the exported workflows.
-- Re-running ingestion adds the chunks again, so clear the Supabase table before re-loading an updated document.
-- Test bookings use fictional patient details only.
-- In this demo, staff alerts go to the project owner's own inbox.
+- the clinic and its information are fictional
+- this is a portfolio project and not medical advice
+- credentials are not stored in the repo
+- re-running ingestion adds duplicate chunks, so clear the vector table before reloading updated content
 
-## Next
+## Skills demonstrated
 
-- Lock down the `appointments` table with Row Level Security and a service role key
-- Add a test set of messages to measure how often reply types are correct
-- Deploy n8n on a server so the bot runs without a laptop
-- WhatsApp integration through Meta's Cloud API
+- LLM workflow orchestration
+- RAG system design
+- vector search and embeddings
+- decision-making and triage logic
+- AI product safety patterns
+- workflow automation with n8n
+- structured storage for appointments and service data
+
+## Future improvements
+
+- stronger row-level security for appointment data
+- better evaluation of triage accuracy
+- production deployment on a dedicated server
+- WhatsApp or SMS integration
+- more robust monitoring and retry logic
+
+## Author
+
+**Hope Mutheu** · [GitHub](https://github.com/hopemutheu733-cmd)
